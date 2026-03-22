@@ -1,0 +1,93 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  LABORER
+  CONTRACTOR
+  PROPERTY_OWNER
+}
+
+enum LaborType {
+  SKILLED
+  UNSKILLED
+}
+
+model User {
+  id                    String                @id @default(uuid())
+  email                 String                @unique
+  phoneNumber           String?               @unique
+  role                  Role
+  createdAt             DateTime              @default(now())
+  updatedAt             DateTime              @updatedAt
+  laborerProfile        LaborerProfile?
+  contractorProfile     ContractorProfile?
+  propertyOwnerProfile  PropertyOwnerProfile?
+}
+
+model LaborerProfile {
+  id                String    @id @default(uuid())
+  userId            String    @unique
+  user              User      @relation(fields: [userId], references: [id])
+  type              LaborType
+  trade             String
+  hourlyRate        Float
+  experience        String
+  state             String
+  city              String
+  skills            String[]
+  bio               String?
+  rating            Float     @default(0)
+  completedJobs     Int       @default(0)
+  applicationsCount Int       @default(0)
+  totalEarned       Float     @default(0)
+}
+
+model ContractorProfile {
+  id          String  @id @default(uuid())
+  userId      String  @unique
+  user        User    @relation(fields: [userId], references: [id])
+  companyName String
+  website     String?
+  experience  String
+  state       String
+  city        String
+}
+
+model PropertyOwnerProfile {
+  id          String  @id @default(uuid())
+  userId      String  @unique
+  user        User    @relation(fields: [userId], references: [id])
+  companyName String?
+  phoneNumber String
+  state       String
+  city        String
+  bio         String?
+}
+
+model Job {
+  id          String    @id @default(uuid())
+  title       String
+  company     String
+  location    String
+  distance    Float
+  pay         Float
+  time        DateTime
+  type        String
+  description String?
+  status      JobStatus @default(OPEN)
+  acceptedBy  String?
+  createdAt   DateTime  @default(now())
+}
+
+enum JobStatus {
+  OPEN
+  ASSIGNED
+  COMPLETED
+  CANCELLED
+}

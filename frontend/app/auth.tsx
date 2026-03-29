@@ -8,102 +8,70 @@ import {
   Dimensions,
   ActivityIndicator,
   Platform,
+  Alert,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
-import * as WebBrowser from 'expo-web-browser';
-import * as AuthSession from 'expo-auth-session';
-import Constants from 'expo-constants';
+import {
+  GoogleSignin,
+  statusCodes,
+} from '@react-native-google-signin/google-signin';
 
 const { width, height } = Dimensions.get('window');
 
-WebBrowser.maybeCompleteAuthSession();
-
 // ──────────────────────────────────────────────
-// 🔑  Your Google OAuth Client ID (Web type)
+// 🔑  Configure Google Sign-In
+//     webClientId = your Web OAuth Client ID from Google Cloud Console
+//     This is needed to get an idToken from the native sign-in flow.
 // ──────────────────────────────────────────────
-const GOOGLE_CLIENT_ID = '664083031630-7f17tp1fjk78r32570h7i2j9uosf7c56.apps.googleusercontent.com';
-
-const discovery: AuthSession.DiscoveryDocument = {
-  authorizationEndpoint: 'https://accounts.google.com/o/oauth2/v2/auth',
-  tokenEndpoint: 'https://oauth2.googleapis.com/token',
-  revocationEndpoint: 'https://oauth2.googleapis.com/revoke',
-};
+GoogleSignin.configure({
+  // webClientId: '664083031630-q9ohm8pqomm658eer1ifd2lumkp3qh58.apps.googleusercontent.com',
+  webClientId: '664083031630-7f17tp1fjk78r32570h7i2j9uosf7c56.apps.googleusercontent.com',
+  offlineAccess: true,
+});
 
 export default function AuthScreen() {
   const [isLoading, setIsLoading] = useState(false);
 
-  // Automatically handles Web (localhost), Expo Go (proxy), and Native (buildforce://) securely
-  const redirectUri = AuthSession.makeRedirectUri({
-    scheme: 'buildforce',
-    preferLocalhost: Platform.OS === 'web', // MUST be false on mobile to force the auth.expo.io proxy
-  });
-
-  const [request, response, promptAsync] = AuthSession.useAuthRequest(
-    {
-      clientId: GOOGLE_CLIENT_ID,
-      scopes: ['openid', 'profile', 'email'],
-      redirectUri,
-      responseType: AuthSession.ResponseType.Token,
-      usePKCE: false, // Forces Google to accept implicit proxy flow without challenge_method errors
-    },
-    discovery
-  );
-
-  // Watch for auth flow completion
-  useEffect(() => {
-    if (response?.type === 'success') {
-      const accessToken = response.params.access_token;
-      if (accessToken) {
-        handleGoogleToken(accessToken);
-      }
-    } else if (response?.type === 'error') {
-      console.error('Auth error:', response.error);
-      setIsLoading(false);
-    } else if (response?.type === 'dismiss' || response?.type === 'cancel') {
-      setIsLoading(false);
-    }
-  }, [response]);
-
   const handleContinueWithGoogle = async () => {
     setIsLoading(true);
     try {
-      // 🚨 CRITICAL FIX FOR EXPO GO ON MOBILE 🚨
-      // Google's OAuth 2.0 policy permanently blocks any redirect_uri starting with 'exp://'.
-      // Since Expo completely removed their auth proxy in newer versions, real Google auth 
-      // will ONLY work exactly right on Web (localhost) or in a compiled Production Android/iOS Build.
-      // To allow you to keep testing your mobile app right now without setting up a 20-minute Android Native Dev Build:
-      if (Platform.OS !== 'web' && Constants.appOwnership === 'expo') {
-        console.log('🤖 Detected Expo Go Mobile: Simulating Google Login so you can test the UI!');
-        setTimeout(() => {
-          setIsLoading(false);
-          router.replace('/role-selection');
-        }, 800);
-        return;
+      // Check if Play Services are available
+      await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
+
+      // Trigger native Google Sign-In
+      const response = await GoogleSignin.signIn();
+
+      if (response.type === 'success' && response.data) {
+        const { user } = response.data;
+        console.log('✅ Google user info:', user);
+        console.log('   Name:', user.name);
+        console.log('   Email:', user.email);
+        console.log('   Photo:', user.photo);
+
+        // Successfully authenticated -> Redirect to Role Selection
+        router.replace('/role-selection');
+      } else if (response.type === 'cancelled') {
+        console.log('User cancelled Google sign-in');
       }
+    } catch (error: any) {
+      console.error('Google Sign-In Error:', error);
 
-      await promptAsync();
-    } catch (error) {
-      console.error('Google sign-in error:', error);
-      setIsLoading(false);
-    }
-  };
-
-  const handleGoogleToken = async (accessToken: string) => {
-    try {
-      // Fetch user profile securely
-      const res = await fetch('https://www.googleapis.com/userinfo/v2/me', {
-        headers: { Authorization: `Bearer ${accessToken}` },
-      });
-      const userInfo = await res.json();
-      console.log('✅ Google user info:', userInfo);
-
-      // Successfully authenticated -> Redirect to Role Selection
-      router.replace('/role-selection');
-    } catch (error) {
-      console.error('Failed to fetch user info:', error);
+      if (error.code === statusCodes.SIGN_IN_CANCELLED) {
+        // User cancelled
+        console.log('Sign-in cancelled by user');
+      } else if (error.code === statusCodes.IN_PROGRESS) {
+        console.log('Sign-in already in progress');
+      } else if (error.code === statusCodes.PLAY_SERVICES_NOT_AVAILABLE) {
+        Alert.alert('Error', 'Google Play Services is not available on this device.');
+      } else {
+        Alert.alert(
+          'Sign-In Error',
+          `Something went wrong. Please try again.\n\nDetails: ${error.message || error}`
+        );
+      }
     } finally {
       setIsLoading(false);
     }
@@ -267,7 +235,7 @@ export default function AuthScreen() {
           <TouchableOpacity
             style={styles.googleButton}
             onPress={handleContinueWithGoogle}
-            disabled={isLoading || !request}
+            disabled={isLoading}
             activeOpacity={0.85}
           >
             {isLoading ? (

@@ -5,17 +5,20 @@ import { Ionicons, MaterialIcons } from '@expo/vector-icons';
 
 const { width, height } = Dimensions.get('window');
 const DRAWER_WIDTH = width * 0.85;
+const BOTTOM_NAV_HEIGHT = Platform.OS === 'ios' ? 88 : 68;
 
 export const DrawerContext = createContext({
   openDrawer: () => {},
   closeDrawer: () => {},
   isDrawerOpen: false,
+  bottomNavHeight: BOTTOM_NAV_HEIGHT,
 });
 
 export function useDrawer() {
   return useContext(DrawerContext);
 }
 
+// Profile removed from sidebar — it lives in the bottom nav now
 const MENU_ITEMS = [
   { id: 'index', label: 'Overview', icon: 'grid-outline' },
   { id: 'open_jobs', label: 'Open Jobs', icon: 'search-outline' },
@@ -28,7 +31,14 @@ const MENU_ITEMS = [
   { id: 'reviews', label: 'Reviews', icon: 'star-outline', isComingSoon: true },
   { id: 'finance', label: 'Finance', icon: 'trending-up-outline', isComingSoon: true },
   { id: 'my_id_card', label: 'My ID Card', icon: 'id-card-outline' },
-  { id: 'profile', label: 'Profile', icon: 'person-outline' },
+];
+
+// Bottom navigation tab definitions
+const BOTTOM_TABS = [
+  { id: 'index', label: 'Overview', icon: 'grid-outline', activeIcon: 'grid' },
+  { id: 'open_jobs', label: 'Open Jobs', icon: 'search-outline', activeIcon: 'search' },
+  { id: 'my_jobs', label: 'My Jobs', icon: 'briefcase-outline', activeIcon: 'briefcase' },
+  { id: 'profile', label: 'profile_tab', icon: 'person-circle-outline', activeIcon: 'person-circle' },
 ];
 
 export default function AppLayout() {
@@ -36,6 +46,9 @@ export default function AppLayout() {
   const slideAnim = useRef(new Animated.Value(-DRAWER_WIDTH)).current;
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const pathname = usePathname();
+
+  // TODO: Replace with real user data from auth context
+  const userName = 'Ravi Singh';
 
   const openDrawer = () => {
     setIsOpen(true);
@@ -77,16 +90,71 @@ export default function AppLayout() {
     router.replace('/auth');
   };
 
+  const navigateToTab = (tabId: string) => {
+    if (tabId === 'index') {
+      router.push('/(tabs)');
+    } else {
+      router.push(`/(tabs)/${tabId}` as any);
+    }
+  };
+
+  const isTabActive = (tabId: string) => {
+    if (tabId === 'index') {
+      return pathname === '/' || pathname === '/index';
+    }
+    return pathname === `/${tabId}`;
+  };
+
   return (
-    <DrawerContext.Provider value={{ openDrawer, closeDrawer, isDrawerOpen: isOpen }}>
+    <DrawerContext.Provider value={{ openDrawer, closeDrawer, isDrawerOpen: isOpen, bottomNavHeight: BOTTOM_NAV_HEIGHT }}>
       <View style={styles.container}>
-        {/* Main Application Stack (Replaces Bottom Tabs) */}
-        <Stack screenOptions={{ headerShown: false }}>
-          <Stack.Screen name="index" />
-          <Stack.Screen name="profile" />
-          <Stack.Screen name="open_jobs" />
-          <Stack.Screen name="my_jobs" />
-        </Stack>
+        {/* Main Application Stack */}
+        <View style={styles.mainContent}>
+          <Stack screenOptions={{ headerShown: false }}>
+            <Stack.Screen name="index" />
+            <Stack.Screen name="profile" />
+            <Stack.Screen name="open_jobs" />
+            <Stack.Screen name="my_jobs" />
+          </Stack>
+        </View>
+
+        {/* ─── Bottom Navigation Bar ─── */}
+        <View style={styles.bottomNav}>
+          <View style={styles.bottomNavInner}>
+            {BOTTOM_TABS.map((tab) => {
+              const active = isTabActive(tab.id);
+              const isProfileTab = tab.id === 'profile';
+
+              return (
+                <TouchableOpacity
+                  key={tab.id}
+                  style={styles.bottomNavTab}
+                  onPress={() => navigateToTab(tab.id)}
+                  activeOpacity={0.7}
+                >
+                  <View style={[styles.tabIconContainer, active && styles.tabIconContainerActive]}>
+                    <Ionicons
+                      name={(active ? tab.activeIcon : tab.icon) as any}
+                      size={isProfileTab ? 22 : 20}
+                      color={active ? '#F97316' : '#64748B'}
+                    />
+                  </View>
+                  <Text
+                    style={[
+                      styles.bottomNavLabel,
+                      active && styles.bottomNavLabelActive,
+                      isProfileTab && styles.profileTabLabel,
+                    ]}
+                    numberOfLines={1}
+                    ellipsizeMode="tail"
+                  >
+                    {isProfileTab ? userName : tab.label}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        </View>
 
         {/* Drawer Overlay (Dim Background) */}
         {isOpen && (
@@ -131,17 +199,7 @@ export default function AppLayout() {
                   onPress={() => {
                     if (item.isComingSoon) return;
                     closeDrawer();
-                    
-                    if (item.id === 'index') {
-                      router.push('/(tabs)');
-                    } else if (item.id === 'profile') {
-                      router.push('/(tabs)/profile');
-                    } else if (item.id === 'open_jobs') {
-                      router.push('/(tabs)/open_jobs');
-                    } else if (item.id === 'my_jobs') {
-                      router.push('/(tabs)/my_jobs');
-                    }
-                    // Add other routes here when built
+                    navigateToTab(item.id);
                   }}
                 >
                   <View style={styles.navItemLeft}>
@@ -168,21 +226,12 @@ export default function AppLayout() {
             })}
           </ScrollView>
 
-          {/* Bottom Profile & Sign out */}
+          {/* Drawer Footer — Sign Out only (profile moved to bottom nav) */}
           <View style={styles.drawerFooter}>
-            <TouchableOpacity 
-              style={styles.profileRow} 
-              onPress={() => {
-                closeDrawer();
-                router.push('/(tabs)/profile');
-              }}
-              activeOpacity={0.7}
-            >
-              <View style={styles.avatarCircle} />
-              <Text style={styles.emailText}>user@example.com</Text>
-            </TouchableOpacity>
             <TouchableOpacity style={styles.signOutButton} onPress={handleSignOut}>
-              <Ionicons name="log-out-outline" size={20} color="#cbd5e1" />
+              <View style={styles.signOutIconContainer}>
+                <Ionicons name="log-out-outline" size={20} color="#F87171" />
+              </View>
               <Text style={styles.signOutText}>Sign Out</Text>
             </TouchableOpacity>
           </View>
@@ -197,9 +246,13 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
+  mainContent: {
+    flex: 1,
+    paddingBottom: BOTTOM_NAV_HEIGHT,
+  },
   overlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(255, 255, 255, 0.4)', // The ref image shows a light overlay for the dashboard dimming
+    backgroundColor: 'rgba(255, 255, 255, 0.4)',
     zIndex: 10,
   },
   closeIconWrapper: {
@@ -214,7 +267,7 @@ const styles = StyleSheet.create({
     bottom: 0,
     left: 0,
     width: DRAWER_WIDTH,
-    backgroundColor: '#120A05', // Very dark brown/black matching the image exactly
+    backgroundColor: '#120A05',
     zIndex: 20,
     shadowColor: '#000',
     shadowOffset: { width: 4, height: 0 },
@@ -228,7 +281,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingTop: Platform.OS === 'ios' ? 50 : 40,
     paddingBottom: 20,
-    backgroundColor: '#292524', // Deeper contrast for top banner
+    backgroundColor: '#292524',
     gap: 8,
   },
   drawerHeaderText: {
@@ -273,7 +326,7 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   navItemActive: {
-    backgroundColor: '#431407', // Dark orange/brown tint
+    backgroundColor: '#431407',
   },
   navItemDisabled: {
     opacity: 0.6,
@@ -305,37 +358,85 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
   },
   drawerFooter: {
-    padding: 24,
+    padding: 20,
+    paddingHorizontal: 24,
     borderTopWidth: 1,
     borderTopColor: '#292524',
     backgroundColor: '#120A05',
     paddingBottom: Platform.OS === 'ios' ? 40 : 24,
   },
-  profileRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    marginBottom: 24,
-  },
-  avatarCircle: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: '#78350f',
-  },
-  emailText: {
-    color: '#94a3b8',
-    fontSize: 13,
-    fontWeight: '500',
-  },
   signOutButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    gap: 14,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    backgroundColor: 'rgba(248, 113, 113, 0.08)',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(248, 113, 113, 0.15)',
+  },
+  signOutIconContainer: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    backgroundColor: 'rgba(248, 113, 113, 0.12)',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   signOutText: {
-    color: '#cbd5e1',
+    color: '#F87171',
     fontSize: 15,
     fontWeight: '600',
+  },
+
+  // ─── Bottom Navigation Styles ───
+  bottomNav: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: BOTTOM_NAV_HEIGHT,
+    backgroundColor: '#0B1120',
+    borderTopWidth: 1,
+    borderTopColor: '#1E293B',
+    zIndex: 5,
+  },
+  bottomNavInner: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-around',
+    paddingTop: 10,
+    paddingHorizontal: 8,
+    flex: 1,
+  },
+  bottomNavTab: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+  },
+  tabIconContainer: {
+    width: 36,
+    height: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 14,
+  },
+  tabIconContainerActive: {
+    backgroundColor: 'rgba(249, 115, 22, 0.12)',
+  },
+  bottomNavLabel: {
+    fontSize: 11,
+    fontWeight: '500',
+    color: '#64748B',
+    textAlign: 'center',
+  },
+  bottomNavLabelActive: {
+    color: '#F97316',
+    fontWeight: '700',
+  },
+  profileTabLabel: {
+    maxWidth: 70,
   },
 });

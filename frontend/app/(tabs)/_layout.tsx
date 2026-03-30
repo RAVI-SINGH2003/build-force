@@ -124,6 +124,7 @@ export default function AppLayout() {
             <Stack.Screen name="profile" />
             <Stack.Screen name="open_jobs" />
             <Stack.Screen name="my_jobs" />
+            <Stack.Screen name="my_id_card" />
           </Stack>
         </View>
 

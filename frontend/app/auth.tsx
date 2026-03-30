@@ -272,7 +272,7 @@ export default function AuthScreen() {
             ]}
           >
             <FeatureChip icon="people-outline" label="Connect with workers" />
-            <FeatureChip icon="briefcase-outline" label="Post & find jobs" />
+            <FeatureChip icon="briefcase-outline" label="Post & find Opportunities" />
             <FeatureChip
               icon="shield-checkmark-outline"
               label="Verified profiles"

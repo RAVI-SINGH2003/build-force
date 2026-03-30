@@ -10,11 +10,15 @@ import {
   Platform,
   Modal,
   FlatList,
+  Alert,
+  ActivityIndicator,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
+import { useAuth } from '../../context/AuthContext';
+import { apiCompleteLaborerOnboarding } from '../../services/api';
 
 // ─── Data ────────────────────────────────────────────────────────
 const SKILLED_TRADES = [
@@ -112,6 +116,10 @@ export default function LaborerOnboardingScreen() {
   const [city, setCity] = useState('');
   const [selectedSkills, setSelectedSkills] = useState<string[]>([]);
   const [bio, setBio] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Auth context
+  const { token, updateUser, user } = useAuth();
 
   // Dropdown Modals
   const [isLaborTypeModalVisible, setIsLaborTypeModalVisible] = useState(false);
@@ -131,15 +139,83 @@ export default function LaborerOnboardingScreen() {
     }
   };
 
-  const handleCompleteSetup = () => {
-    // Save profile data to backend here...
-    console.log('Laborer Profile:', {
-      laborType, trade: laborType === 'skilled' ? trade : 'General Laborer', 
-      rate, experience, phone, city, state: indianState, selectedSkills, bio
-    });
+  const handleCompleteSetup = async () => {
+    // Validate required fields
+    if (!trade) {
+      Alert.alert('Missing Field', 'Please select a primary trade.');
+      return;
+    }
+    if (!rate) {
+      Alert.alert('Missing Field', 'Please enter your hourly rate.');
+      return;
+    }
+    if (!experience) {
+      Alert.alert('Missing Field', 'Please enter years of experience.');
+      return;
+    }
+    if (!phone) {
+      Alert.alert('Missing Field', 'Please enter your phone number.');
+      return;
+    }
+    if (!indianState || !city) {
+      Alert.alert('Missing Field', 'Please select your state and city.');
+      return;
+    }
+    if (!token) {
+      Alert.alert('Error', 'You must be signed in. Please go back and sign in again.');
+      router.replace('/auth');
+      return;
+    }
 
-    // Navigate to Dashboard
-    router.replace('/(tabs)');
+    setIsSubmitting(true);
+
+    try {
+      const onboardingData = {
+        type: laborType === 'skilled' ? 'SKILLED' as const : 'UNSKILLED' as const,
+        trade,
+        hourlyRate: rate,
+        experience,
+        phone,
+        state: indianState,
+        city,
+        skills: selectedSkills,
+        bio: bio || undefined,
+      };
+
+      console.log('📤 Submitting laborer onboarding:', onboardingData);
+      const response = await apiCompleteLaborerOnboarding(token, onboardingData);
+      console.log('✅ Onboarding complete:', response);
+
+      // Update local user state to reflect completed onboarding
+      if (user) {
+        updateUser({ 
+          ...user, 
+          onboardingComplete: true,
+          phoneNumber: phone,
+          laborerProfile: response.profile
+        });
+      }
+
+      // Navigate to Dashboard
+      Alert.alert(
+        '🎉 Profile Complete!',
+        'Your laborer profile has been created successfully. Welcome to BuildForce!',
+        [
+          {
+            text: 'Go to Dashboard',
+            onPress: () => router.replace('/(tabs)'),
+          },
+        ]
+      );
+    } catch (error: any) {
+      console.error('Onboarding error:', error);
+      Alert.alert(
+        'Error',
+        error.message || 'Failed to save your profile. Please try again.'
+      );
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   // Helper render for modal lists
@@ -189,6 +265,14 @@ export default function LaborerOnboardingScreen() {
       <View style={styles.container}>
         <StatusBar style="light" />
         <LinearGradient colors={['#0B1120', '#0F1724', '#131D30']} style={StyleSheet.absoluteFillObject} />
+
+        {/* Loading overlay */}
+        {isSubmitting && (
+          <View style={styles.loadingOverlay}>
+            <ActivityIndicator size="large" color="#F97316" />
+            <Text style={styles.loadingText}>Saving your profile...</Text>
+          </View>
+        )}
 
         <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
           <Text style={styles.pageTitle}>Complete Your Profile</Text>
@@ -249,7 +333,7 @@ export default function LaborerOnboardingScreen() {
             <TextInput
               style={styles.input}
               keyboardType="phone-pad"
-              placeholder="+1 (555) 000-0000"
+              placeholder="+91 99999 99999"
               placeholderTextColor="#64748B"
               value={phone}
               onChangeText={setPhone}
@@ -325,11 +409,16 @@ export default function LaborerOnboardingScreen() {
 
           {/* ─── Submit Button ─── */}
           <TouchableOpacity 
-            style={styles.submitButton}
+            style={[styles.submitButton, isSubmitting && styles.submitButtonDisabled]}
             onPress={handleCompleteSetup}
             activeOpacity={0.8}
+            disabled={isSubmitting}
           >
-            <Text style={styles.submitButtonText}>Complete Setup & Go to Dashboard</Text>
+            {isSubmitting ? (
+              <ActivityIndicator color="#FFF" size="small" />
+            ) : (
+              <Text style={styles.submitButtonText}>Complete Setup & Go to Dashboard</Text>
+            )}
           </TouchableOpacity>
         </ScrollView>
 
@@ -428,7 +517,7 @@ const styles = StyleSheet.create({
     borderColor: '#334155',
     borderRadius: 12,
     paddingHorizontal: 16,
-    paddingVertical: 16, // slightly taller for standard picker look
+    paddingVertical: 16,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
@@ -484,11 +573,27 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 4,
   },
+  submitButtonDisabled: {
+    opacity: 0.7,
+  },
   submitButtonText: {
     color: '#FFF',
     fontSize: 16,
     fontWeight: '700',
     letterSpacing: 0.3,
+  },
+  loadingOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(11, 17, 32, 0.85)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 100,
+  },
+  loadingText: {
+    color: '#CBD5E1',
+    fontSize: 16,
+    marginTop: 16,
+    fontWeight: '600',
   },
 
   // ─── Modal Styles ───

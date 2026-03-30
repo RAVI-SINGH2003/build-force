@@ -16,6 +16,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useDrawer } from './_layout';
+import { useAuth } from '../../context/AuthContext';
 
 // ─── Data ────────────────────────────────────────────────────────
 const TRADES = [
@@ -44,18 +45,21 @@ const STATES = Object.keys(INDIA_LOCATIONS).sort();
 // ─── Component ────────────────────────────────────────────────────
 export default function ProfileScreen() {
   const { openDrawer } = useDrawer();
+  const { user } = useAuth();
 
-  // Form State (Pre-filled with mock data based on the images)
-  const [fullName, setFullName] = useState('Ravi Singh');
-  const [email, setEmail] = useState('wixoxis147@isfew.com');
-  const [trade, setTrade] = useState('Electrician');
-  const [experience, setExperience] = useState('4');
-  const [hourlyRate, setHourlyRate] = useState('232');
-  const [bio, setBio] = useState('');
-  const [phone, setPhone] = useState('2323232332');
-  const [indianState, setIndianState] = useState('Delhi');
-  const [city, setCity] = useState('New Delhi');
-  const [selectedSkills, setSelectedSkills] = useState<string[]>(['Blueprint Reading']);
+  const laborerProfile = user?.laborerProfile || {};
+
+  // Form State (Pre-filled with data from the database via AuthContext)
+  const [fullName, setFullName] = useState(user?.name || '');
+  const [email, setEmail] = useState(user?.email || '');
+  const [trade, setTrade] = useState(laborerProfile.trade || '');
+  const [experience, setExperience] = useState(laborerProfile.experience || '');
+  const [hourlyRate, setHourlyRate] = useState(laborerProfile.hourlyRate ? String(laborerProfile.hourlyRate) : '');
+  const [bio, setBio] = useState(laborerProfile.bio || '');
+  const [phone, setPhone] = useState(user?.phoneNumber || '');
+  const [indianState, setIndianState] = useState(laborerProfile.state || '');
+  const [city, setCity] = useState(laborerProfile.city || '');
+  const [selectedSkills, setSelectedSkills] = useState<string[]>(laborerProfile.skills || []);
 
   // Modals
   const [isTradeModalVisible, setIsTradeModalVisible] = useState(false);
@@ -126,14 +130,12 @@ export default function ProfileScreen() {
             
             {/* Badges */}
             <View style={styles.badgesWrapper}>
-              <View style={styles.unverifiedBadge}>
-                <Ionicons name="information-circle-outline" size={14} color="#F87171" />
-                <Text style={styles.unverifiedText}>ID Unverified</Text>
-              </View>
-              <View style={styles.unverifiedBadge}>
-                <Ionicons name="information-circle-outline" size={14} color="#F87171" />
-                <Text style={styles.unverifiedText}>License Unverified</Text>
-              </View>
+              {!user?.onboardingComplete && (
+                <View style={styles.unverifiedBadge}>
+                  <Ionicons name="information-circle-outline" size={14} color="#F87171" />
+                  <Text style={styles.unverifiedText}>Profile Incomplete</Text>
+                </View>
+              )}
             </View>
           </View>
 

@@ -20,9 +20,13 @@ enum LaborType {
 
 model User {
   id                    String                @id @default(uuid())
+  googleId              String?               @unique
   email                 String                @unique
+  name                  String?
+  photoUrl              String?
   phoneNumber           String?               @unique
-  role                  Role
+  role                  Role?
+  onboardingComplete    Boolean               @default(false)
   createdAt             DateTime              @default(now())
   updatedAt             DateTime              @updatedAt
   laborerProfile        LaborerProfile?

@@ -18,22 +18,37 @@ import {
   GoogleSignin,
   statusCodes,
 } from '@react-native-google-signin/google-signin';
+import { useAuth } from '../context/AuthContext';
 
 const { width, height } = Dimensions.get('window');
 
 // ──────────────────────────────────────────────
 // 🔑  Configure Google Sign-In
-//     webClientId = your Web OAuth Client ID from Google Cloud Console
-//     This is needed to get an idToken from the native sign-in flow.
 // ──────────────────────────────────────────────
 GoogleSignin.configure({
-  // webClientId: '664083031630-q9ohm8pqomm658eer1ifd2lumkp3qh58.apps.googleusercontent.com',
   webClientId: '664083031630-7f17tp1fjk78r32570h7i2j9uosf7c56.apps.googleusercontent.com',
   offlineAccess: true,
 });
 
 export default function AuthScreen() {
   const [isLoading, setIsLoading] = useState(false);
+  const { signInWithGoogle, isAuthenticated, user, isLoading: authLoading } = useAuth();
+
+  // If user is already authenticated, redirect based on onboarding status
+  useEffect(() => {
+    if (!authLoading && isAuthenticated && user) {
+      if (user.onboardingComplete) {
+        router.replace('/(tabs)');
+      } else if (user.role) {
+        // Has role but didn't finish onboarding
+        if (user.role === 'LABORER') router.replace('/onboarding/laborer');
+        else if (user.role === 'CONTRACTOR') router.replace('/onboarding/contractor');
+        else if (user.role === 'PROPERTY_OWNER') router.replace('/onboarding/property-owner');
+      } else {
+        router.replace('/role-selection');
+      }
+    }
+  }, [authLoading, isAuthenticated, user]);
 
   const handleContinueWithGoogle = async () => {
     setIsLoading(true);
@@ -41,18 +56,49 @@ export default function AuthScreen() {
       // Check if Play Services are available
       await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
 
+      // Sign out first so the account chooser is always shown
+      await GoogleSignin.signOut();
+
       // Trigger native Google Sign-In
       const response = await GoogleSignin.signIn();
 
       if (response.type === 'success' && response.data) {
-        const { user } = response.data;
-        console.log('✅ Google user info:', user);
-        console.log('   Name:', user.name);
-        console.log('   Email:', user.email);
-        console.log('   Photo:', user.photo);
+        const { idToken } = response.data;
+        const { user: googleUser } = response.data;
 
-        // Successfully authenticated -> Redirect to Role Selection
-        router.replace('/role-selection');
+        console.log('✅ Google user info:', googleUser);
+        console.log('   Name:', googleUser.name);
+        console.log('   Email:', googleUser.email);
+
+        if (!idToken) {
+          Alert.alert('Error', 'Could not get ID token from Google. Please try again.');
+          return;
+        }
+
+        // Send idToken to our backend for verification
+        try {
+          const { user: authUser, isNewUser } = await signInWithGoogle(idToken);
+          console.log('✅ Backend auth successful:', authUser.email);
+
+          if (authUser.onboardingComplete) {
+            // Returning user — go straight to dashboard
+            router.replace('/(tabs)');
+          } else if (authUser.role) {
+            // Has role but didn't finish onboarding
+            if (authUser.role === 'LABORER') router.replace('/onboarding/laborer');
+            else if (authUser.role === 'CONTRACTOR') router.replace('/onboarding/contractor');
+            else if (authUser.role === 'PROPERTY_OWNER') router.replace('/onboarding/property-owner');
+          } else {
+            // New user — go to role selection
+            router.replace('/role-selection');
+          }
+        } catch (backendError: any) {
+          console.error('Backend auth error:', backendError);
+          Alert.alert(
+            'Authentication Error',
+            `Could not verify your account with our server.\n\n${backendError.message || 'Please try again.'}`
+          );
+        }
       } else if (response.type === 'cancelled') {
         console.log('User cancelled Google sign-in');
       }
@@ -60,7 +106,6 @@ export default function AuthScreen() {
       console.error('Google Sign-In Error:', error);
 
       if (error.code === statusCodes.SIGN_IN_CANCELLED) {
-        // User cancelled
         console.log('Sign-in cancelled by user');
       } else if (error.code === statusCodes.IN_PROGRESS) {
         console.log('Sign-in already in progress');
@@ -149,6 +194,19 @@ export default function AuthScreen() {
       ]),
     ).start();
   }, []);
+
+  // Show loading spinner while checking saved auth
+  if (authLoading) {
+    return (
+      <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
+        <LinearGradient
+          colors={['#0B1120', '#0F1724', '#131D30']}
+          style={StyleSheet.absoluteFill}
+        />
+        <ActivityIndicator size="large" color="#F97316" />
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>

@@ -1,4 +1,4 @@
-import React, { useRef, useEffect } from 'react';
+import React, { useRef, useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -8,11 +8,15 @@ import {
   Animated,
   Dimensions,
   Platform,
+  Alert,
+  ActivityIndicator,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
+import { useAuth } from '../context/AuthContext';
+import { apiSetRole } from '../services/api';
 
 const { width } = Dimensions.get('window');
 
@@ -25,10 +29,11 @@ interface RoleCardProps {
   color: string;
   badge?: string;
   delay: number;
+  isSubmitting: boolean;
   onPress: () => void;
 }
 
-function RoleCard({ title, subtitle, description, bullets, icon, color, badge, delay, onPress }: RoleCardProps) {
+function RoleCard({ title, subtitle, description, bullets, icon, color, badge, delay, isSubmitting, onPress }: RoleCardProps) {
   const slideAnim = useRef(new Animated.Value(50)).current;
   const fadeAnim = useRef(new Animated.Value(0)).current;
 
@@ -59,7 +64,7 @@ function RoleCard({ title, subtitle, description, bullets, icon, color, badge, d
         marginBottom: 20,
       }}
     >
-      <TouchableOpacity activeOpacity={0.8} onPress={onPress}>
+      <TouchableOpacity activeOpacity={0.8} onPress={onPress} disabled={isSubmitting}>
         <LinearGradient
           colors={['rgba(30, 41, 59, 0.7)', 'rgba(15, 23, 42, 0.8)']}
           style={[styles.card, { borderColor: color }]}
@@ -94,6 +99,8 @@ function RoleCard({ title, subtitle, description, bullets, icon, color, badge, d
 
 export default function RoleSelectionScreen() {
   const headerFade = useRef(new Animated.Value(0)).current;
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const { token, updateUser, user } = useAuth();
 
   useEffect(() => {
     Animated.timing(headerFade, {
@@ -103,17 +110,47 @@ export default function RoleSelectionScreen() {
     }).start();
   }, []);
 
-  const selectRole = (role: string) => {
-    console.log('Selected Role:', role);
+  const selectRole = async (role: string) => {
+    if (!token) {
+      Alert.alert('Error', 'You must be signed in to select a role.');
+      router.replace('/auth');
+      return;
+    }
 
-    if (role === 'laborer') {
-      router.push('/onboarding/laborer');
-    } else if (role === 'contractor') {
-      router.push('/onboarding/contractor');
-    } else if (role === 'property_owner') {
-      router.push('/onboarding/property-owner');
-    } else {
-      router.replace('/(tabs)');
+    setIsSubmitting(true);
+
+    try {
+      // Map frontend role names to backend enum values
+      const roleMap: Record<string, string> = {
+        laborer: 'LABORER',
+        contractor: 'CONTRACTOR',
+        property_owner: 'PROPERTY_OWNER',
+      };
+
+      const backendRole = roleMap[role];
+      const response = await apiSetRole(token, backendRole);
+      console.log('✅ Role set:', response);
+
+      // Update local user state
+      if (user) {
+        updateUser({ ...user, role: backendRole as any });
+      }
+
+      // Navigate to the onboarding screen for the chosen role
+      if (role === 'laborer') {
+        router.push('/onboarding/laborer');
+      } else if (role === 'contractor') {
+        router.push('/onboarding/contractor');
+      } else if (role === 'property_owner') {
+        router.push('/onboarding/property-owner');
+      } else {
+        router.replace('/(tabs)');
+      }
+    } catch (error: any) {
+      console.error('Role selection error:', error);
+      Alert.alert('Error', error.message || 'Failed to set role. Please try again.');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -123,6 +160,14 @@ export default function RoleSelectionScreen() {
       
       {/* Background */}
       <LinearGradient colors={['#0B1120', '#0F1724', '#131D30']} style={StyleSheet.absoluteFillObject} />
+
+      {/* Loading overlay */}
+      {isSubmitting && (
+        <View style={styles.loadingOverlay}>
+          <ActivityIndicator size="large" color="#F97316" />
+          <Text style={styles.loadingText}>Setting your role...</Text>
+        </View>
+      )}
 
       <ScrollView 
         contentContainerStyle={styles.scrollContent}
@@ -143,6 +188,7 @@ export default function RoleSelectionScreen() {
           icon="home-outline"
           color="#FBBF24" // Amber/Yellow
           delay={100}
+          isSubmitting={isSubmitting}
           onPress={() => selectRole('property_owner')}
         />
 
@@ -155,6 +201,7 @@ export default function RoleSelectionScreen() {
           color="#F97316" // Orange
           badge="MOST POPULAR"
           delay={250}
+          isSubmitting={isSubmitting}
           onPress={() => selectRole('contractor')}
         />
 
@@ -166,6 +213,7 @@ export default function RoleSelectionScreen() {
           icon="construct-outline"
           color="#22C55E" // Green
           delay={400}
+          isSubmitting={isSubmitting}
           onPress={() => selectRole('laborer')}
         />
       </ScrollView>
@@ -256,5 +304,18 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '800',
     letterSpacing: 0.5,
+  },
+  loadingOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(11, 17, 32, 0.85)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 100,
+  },
+  loadingText: {
+    color: '#CBD5E1',
+    fontSize: 16,
+    marginTop: 16,
+    fontWeight: '600',
   },
 });

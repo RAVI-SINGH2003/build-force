@@ -2,6 +2,8 @@ import React, { useState, useRef, createContext, useContext } from 'react';
 import { View, Text, StyleSheet, Animated, TouchableOpacity, Dimensions, ScrollView, Platform, Easing } from 'react-native';
 import { Stack, router, usePathname } from 'expo-router';
 import { Ionicons, MaterialIcons } from '@expo/vector-icons';
+import { useAuth } from '../../context/AuthContext';
+import { GoogleSignin } from '@react-native-google-signin/google-signin';
 
 const { width, height } = Dimensions.get('window');
 const DRAWER_WIDTH = width * 0.85;
@@ -47,8 +49,9 @@ export default function AppLayout() {
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const pathname = usePathname();
 
-  // TODO: Replace with real user data from auth context
-  const userName = 'Ravi Singh';
+  // Use real user data from auth context
+  const { user, signOut } = useAuth();
+  const userName = user?.name || 'User';
 
   const openDrawer = () => {
     setIsOpen(true);
@@ -85,8 +88,14 @@ export default function AppLayout() {
     });
   };
 
-  const handleSignOut = () => {
+  const handleSignOut = async () => {
     closeDrawer();
+    try {
+      await GoogleSignin.signOut();
+    } catch (e) {
+      // Ignore sign-out errors
+    }
+    await signOut();
     router.replace('/auth');
   };
 
